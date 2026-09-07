@@ -53,31 +53,35 @@ export const criarUsuario = async (req, res) => {
 
 export const loginUsuario = async (req, res) => {
     try {
-        const { email, senha } = req.body;
+        const { identificador, senha } = req.body;
 
-        if (!email || !senha) {
+        if (!identificador || !senha) {
             return res.status(400).json({
-                mensagem: "E-mail e senha são obrigatórios."
+                mensagem: "Nome ou e-mail e senha são obrigatórios."
             });
         }
 
-        const emailNormalizado = email.trim().toLowerCase();
+        const valor = identificador.trim();
 
-        // Procura o usuário
-        const usuario = await prisma.usuarios.findUnique({
+        const usuario = await prisma.usuarios.findFirst({
             where: {
-                email: emailNormalizado
+                OR: [
+                    {
+                        email: valor
+                    },
+                    {
+                        nome: valor
+                    }
+                ]
             }
         });
 
-        // Não diz se o erro foi no e-mail ou na senha
         if (!usuario) {
             return res.status(401).json({
-                mensagem: "E-mail ou senha inválidos."
+                mensagem: "Nome ou e-mail ou senha estão inválidos."
             });
         }
 
-        // Compara senha digitada com o hash do banco
         const senhaValida = await bcrypt.compare(
             senha,
             usuario.senha
@@ -85,11 +89,10 @@ export const loginUsuario = async (req, res) => {
 
         if (!senhaValida) {
             return res.status(401).json({
-                mensagem: "E-mail ou senha inválidos."
+                mensagem: "Nome ou e-mail ou senha inválidos."
             });
         }
 
-        // Cria o JWT
         const token = jwt.sign(
             {
                 id: usuario.id,
@@ -112,7 +115,7 @@ export const loginUsuario = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Erro no login:", error);
 
         return res.status(500).json({
             erro: "Erro ao realizar login."
@@ -121,10 +124,9 @@ export const loginUsuario = async (req, res) => {
 };
 
 
-// 2. Listar Todos os Usuários
 export const listarUsuarios = async (req, res) => {
     try {
-        // Busca todos os usuários, mas não traz a senha por segurança
+        
         const usuarios = await prisma.usuarios.findMany({
             select: {
                 id: true,

@@ -61,18 +61,11 @@ export const loginUsuario = async (req, res) => {
             });
         }
 
-        const valor = identificador.trim();
+        const valor = identificador.trim().toLowerCase();
 
         const usuario = await prisma.usuarios.findFirst({
             where: {
-                OR: [
-                    {
-                        email: valor
-                    },
-                    {
-                        nome: valor
-                    }
-                ]
+                email: valor
             }
         });
 

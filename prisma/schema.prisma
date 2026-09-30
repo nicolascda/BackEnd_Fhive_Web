@@ -10,9 +10,53 @@ datasource db {
 }
 
 model Usuarios {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  nome         String
-  email        String @unique
-  senha        String
-  createdAt    DateTime @default(now())
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  nome       String
+  email      String         @unique
+  senha      String
+  createdAt  DateTime       @default(now())
+
+  dispositivos Dispositivos[]
+}
+
+model Dispositivos {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId    String         @unique
+  nome        String
+  tipo        String
+  status      String         @default("offline")
+  lastSeenAt  DateTime?
+  createdAt   DateTime       @default(now())
+
+  usuarioId   String         @db.ObjectId
+  usuario     Usuarios       @relation(fields: [usuarioId], references: [id])
+
+  telemetrias Telemetrias[]
+}
+
+model Telemetrias {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  sessaoId            String?
+
+  periodoInicio       DateTime      @default(now())
+  atualizadoEm        DateTime      @updatedAt
+
+  minutoAtual         Int
+  consumo1Minuto     Float
+  consumoAcumulado    Float
+
+  consumo5Minutos     Float?
+  consumo10Minutos    Float?
+
+  finalizado          Boolean       @default(false)
+
+  dados               Json
+  leituras            Json
+
+  dispositivoId       String        @db.ObjectId
+  dispositivo         Dispositivos  @relation(fields: [dispositivoId], references: [id])
+
+  @@index([dispositivoId, periodoInicio])
+  @@index([dispositivoId, finalizado])
+  @@index([dispositivoId, sessaoId, finalizado])
 }

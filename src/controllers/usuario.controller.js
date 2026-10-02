@@ -53,15 +53,15 @@ export const criarUsuario = async (req, res) => {
 
 export const loginUsuario = async (req, res) => {
     try {
-        const { identificador, senha } = req.body;
+        const { email, senha } = req.body;
 
-        if (!identificador || !senha) {
+        if (!email || !senha) {
             return res.status(400).json({
                 mensagem: "Nome ou e-mail e senha são obrigatórios."
             });
         }
 
-        const valor = identificador.trim().toLowerCase();
+        const valor = email.trim().toLowerCase();
 
         const usuario = await prisma.usuarios.findFirst({
             where: {

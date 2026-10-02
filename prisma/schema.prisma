@@ -10,28 +10,30 @@ datasource db {
 }
 
 model Usuarios {
-  id         String         @id @default(auto()) @map("_id") @db.ObjectId
-  nome       String
-  email      String         @unique
-  senha      String
-  createdAt  DateTime       @default(now())
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  nome         String
+  email        String         @unique
+  senha        String
+  createdAt    DateTime       @default(now())
 
   dispositivos Dispositivos[]
+  rotinas      Rotinas[]
 }
 
 model Dispositivos {
-  id          String         @id @default(auto()) @map("_id") @db.ObjectId
-  deviceId    String         @unique
-  nome        String
-  tipo        String
-  status      String         @default("offline")
-  lastSeenAt  DateTime?
-  createdAt   DateTime       @default(now())
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId      String         @unique
+  nome          String
+  tipo          String
+  status        String         @default("offline")
+  lastSeenAt    DateTime?
+  createdAt     DateTime       @default(now())
 
-  usuarioId   String         @db.ObjectId
-  usuario     Usuarios       @relation(fields: [usuarioId], references: [id])
+  usuarioId     String         @db.ObjectId
+  usuario       Usuarios       @relation(fields: [usuarioId], references: [id])
 
-  telemetrias Telemetrias[]
+  telemetrias   Telemetrias[]
+  rotinas       Rotinas[]
 }
 
 model Telemetrias {
@@ -42,15 +44,13 @@ model Telemetrias {
   atualizadoEm        DateTime      @updatedAt
 
   minutoAtual         Int
-  consumo1Minuto     Float
+  consumo1Minuto      Float
   consumoAcumulado    Float
-
   consumo5Minutos     Float?
   consumo10Minutos    Float?
 
   finalizado          Boolean       @default(false)
 
-  dados               Json
   leituras            Json
 
   dispositivoId       String        @db.ObjectId
@@ -59,4 +59,50 @@ model Telemetrias {
   @@index([dispositivoId, periodoInicio])
   @@index([dispositivoId, finalizado])
   @@index([dispositivoId, sessaoId, finalizado])
+}
+
+model Rotinas {
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  nome            String
+  descricao       String?
+  ativo           Boolean            @default(true)
+
+  horarioInicial  String
+  horarioFinal    String?
+  diasSemana      Json
+  acoes           Json
+
+  usuarioId       String             @db.ObjectId
+  usuario         Usuarios           @relation(fields: [usuarioId], references: [id])
+
+  dispositivoId   String             @db.ObjectId
+  dispositivo     Dispositivos       @relation(fields: [dispositivoId], references: [id])
+
+  execucoes       ExecucoesRotina[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([usuarioId, ativo])
+  @@index([dispositivoId, ativo])
+}
+
+model ExecucoesRotina {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+
+  rotinaId        String    @db.ObjectId
+  rotina          Rotinas   @relation(fields: [rotinaId], references: [id])
+
+  acaoOrdem       Int
+  tipoAcao        String
+  dados           Json
+
+  programadaPara  DateTime
+  executadaEm     DateTime?
+  status          String    @default("pendente")
+  erro            String?
+
+  createdAt       DateTime  @default(now())
+
+  @@index([rotinaId, programadaPara])
 }

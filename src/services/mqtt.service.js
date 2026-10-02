@@ -47,14 +47,13 @@ export function iniciarMQTT() {
                     console.error("Erro ao processar mensagem:", erro);
                 });
 
-            filasPorDispositivo.set(
-                deviceId,
-                proximaFila.finally(() => {
-                    if (filasPorDispositivo.get(deviceId) === proximaFila) {
-                        filasPorDispositivo.delete(deviceId);
-                    }
-                })
-            );
+            const filaFinal = proximaFila.finally(() => {
+                if (filasPorDispositivo.get(deviceId) === filaFinal) {
+                    filasPorDispositivo.delete(deviceId);
+                }
+            });
+
+            filasPorDispositivo.set(deviceId, filaFinal);
         } catch (erro) {
             console.error("Erro ao interpretar mensagem MQTT:", erro);
         }
@@ -77,10 +76,17 @@ async function processarMensagem(deviceId, dados) {
         return;
     }
 
-    const energia = Number(dados.energy_wh);
-    const sessaoId = dados.sessao_id;
+    const { sessao_id, ...leitura } = dados;
 
-    if (!Number.isFinite(energia) || !sessaoId) {
+    const energia = Number(leitura.energy_wh);
+    const sessaoId = sessao_id;
+    const leituraId = leitura.leitura_id;
+
+    if (
+        !Number.isFinite(energia) ||
+        !sessaoId ||
+        !leituraId
+    ) {
         console.error("Dados de telemetria inválidos.");
         return;
     }
@@ -106,8 +112,7 @@ async function processarMensagem(deviceId, dados) {
                 consumo5Minutos: null,
                 consumo10Minutos: null,
                 finalizado: false,
-                dados,
-                leituras: [dados],
+                leituras: [leitura],
                 dispositivoId: dispositivo.id
             }
         });
@@ -117,7 +122,7 @@ async function processarMensagem(deviceId, dados) {
             : [];
 
         const leituraDuplicada = leituras.some(
-            (leitura) => leitura.leitura_id === dados.leitura_id
+            (item) => item.leitura_id === leituraId
         );
 
         if (leituraDuplicada) {
@@ -126,34 +131,34 @@ async function processarMensagem(deviceId, dados) {
 
         const proximoMinuto = telemetria.minutoAtual + 1;
 
-        leituras.push(dados);
+        leituras.push(leitura);
 
         const consumoAcumulado = leituras.reduce(
-            (total, leitura) =>
-                total + Number(leitura.energy_wh || 0),
+            (total, item) =>
+                total + Number(item.energy_wh || 0),
             0
         );
 
         const consumo5Minutos =
             proximoMinuto >= 5
                 ? leituras
-                      .slice(0, 5)
-                      .reduce(
-                          (total, leitura) =>
-                              total + Number(leitura.energy_wh || 0),
-                          0
-                      )
+                    .slice(0, 5)
+                    .reduce(
+                        (total, item) =>
+                            total + Number(item.energy_wh || 0),
+                        0
+                    )
                 : null;
 
         const consumo10Minutos =
             proximoMinuto >= 10
                 ? leituras
-                      .slice(0, 10)
-                      .reduce(
-                          (total, leitura) =>
-                              total + Number(leitura.energy_wh || 0),
-                          0
-                      )
+                    .slice(0, 10)
+                    .reduce(
+                        (total, item) =>
+                            total + Number(item.energy_wh || 0),
+                        0
+                    )
                 : null;
 
         await prisma.telemetrias.update({
@@ -165,7 +170,6 @@ async function processarMensagem(deviceId, dados) {
                 consumo5Minutos,
                 consumo10Minutos,
                 finalizado: proximoMinuto >= 10,
-                dados,
                 leituras
             }
         });
@@ -180,6 +184,6 @@ async function processarMensagem(deviceId, dados) {
     });
 
     console.log(
-        `Dispositivo ${deviceId} processado - minuto ${dados.minuto}`
+        `Dispositivo ${deviceId} processado - minuto ${leitura.minuto}`
     );
 }

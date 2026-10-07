@@ -1,11 +1,7 @@
 import { Router } from "express";
 
-import {
-    criarDispositivo,
-    listarDispositivos,
-    buscarDispositivo,
-    listarTelemetrias
-} from "../controllers/dispositivo.controller.js";
+import { criarDispositivo, listarDispositivos, buscarDispositivo, listarTelemetrias } 
+from "../controllers/dispositivo.controller.js";
 
 import { autenticar } from "../middlewares/authMiddleware.js";
 

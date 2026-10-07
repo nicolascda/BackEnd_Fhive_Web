@@ -2,51 +2,180 @@ import prisma from "../data/prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
+import {
+    criarCadastroPendente,
+    buscarCadastroPendente,
+    removerCadastroPendente
+} from "../services/codigo.service.js";
+
+import {
+    enviarCodigoConfirmacao
+} from "../services/email.service.js";
+
 // Cadastrar usuário
 export const criarUsuario = async (req, res) => {
     try {
-        const { nome, email, senha } = req.body;
+        const {
+            nome,
+            email,
+            senha
+        } = req.body;
 
         if (!nome || !email || !senha) {
             return res.status(400).json({
-                mensagem: "Todos os campos são obrigatórios."
+                mensagem:
+                    "Nome, e-mail e senha são obrigatórios."
             });
         }
 
-        const emailNormalizado = email.trim().toLowerCase();
+        const emailNormalizado =
+            email.trim().toLowerCase();
 
-        const usuarioExiste = await prisma.usuarios.findUnique({
-            where: {
-                email: emailNormalizado
-            }
-        });
+        const usuarioExistente =
+            await prisma.usuarios.findUnique({
+                where: {
+                    email: emailNormalizado
+                }
+            });
 
-        if (usuarioExiste) {
-            return res.status(400).json({
-                mensagem: "Este e-mail já está em uso."
+        if (usuarioExistente) {
+            return res.status(409).json({
+                mensagem:
+                    "Este e-mail já está cadastrado."
             });
         }
 
-        const senhaCriptografada = await bcrypt.hash(senha, 10);
+        const senhaHash =
+            await bcrypt.hash(senha, 10);
 
-        const novoUsuario = await prisma.usuarios.create({
-            data: {
-                nome,
-                email: emailNormalizado,
-                senha: senhaCriptografada
+        const codigo = criarCadastroPendente(
+            emailNormalizado,
+            {
+                nome: nome.trim(),
+                senha: senhaHash
             }
-        });
+        );
 
-        return res.status(201).json({
-            id: novoUsuario.id,
-            mensagem: "Usuário cadastrado com sucesso!"
+        try {
+            await enviarCodigoConfirmacao(
+                emailNormalizado,
+                nome.trim(),
+                codigo
+            );
+        } catch (error) {
+            removerCadastroPendente(
+                emailNormalizado
+            );
+
+            throw error;
+        }
+
+        return res.status(200).json({
+            mensagem:
+                "Código de confirmação enviado para o e-mail."
         });
 
     } catch (error) {
-        console.error(error);
+        console.error(
+            "Erro ao iniciar cadastro:",
+            error
+        );
 
         return res.status(500).json({
-            erro: "Erro ao cadastrar usuário."
+            mensagem:
+                "Erro ao iniciar cadastro.",
+            erro: error.message
+        });
+    }
+};
+
+export const confirmarEmail = async (req, res) => {
+    try {
+        const {
+            email,
+            codigo
+        } = req.body;
+
+        if (!email || !codigo) {
+            return res.status(400).json({
+                mensagem:
+                    "E-mail e código são obrigatórios."
+            });
+        }
+
+        const emailNormalizado =
+            email.trim().toLowerCase();
+
+        const cadastro =
+            buscarCadastroPendente(
+                emailNormalizado
+            );
+
+        if (!cadastro) {
+            return res.status(400).json({
+                mensagem:
+                    "Código inexistente ou expirado."
+            });
+        }
+
+        if (cadastro.codigo !== codigo) {
+            return res.status(400).json({
+                mensagem:
+                    "Código de confirmação inválido."
+            });
+        }
+
+        const usuarioExistente =
+            await prisma.usuarios.findUnique({
+                where: {
+                    email: emailNormalizado
+                }
+            });
+
+        if (usuarioExistente) {
+            removerCadastroPendente(
+                emailNormalizado
+            );
+
+            return res.status(409).json({
+                mensagem:
+                    "Este e-mail já está cadastrado."
+            });
+        }
+
+        const usuario =
+            await prisma.usuarios.create({
+                data: {
+                    nome: cadastro.nome,
+                    email: emailNormalizado,
+                    senha: cadastro.senha
+                }
+            });
+
+        removerCadastroPendente(
+            emailNormalizado
+        );
+
+        return res.status(201).json({
+            mensagem:
+                "Cadastro confirmado com sucesso.",
+            usuario: {
+                id: usuario.id,
+                nome: usuario.nome,
+                email: usuario.email
+            }
+        });
+
+    } catch (error) {
+        console.error(
+            "Erro ao confirmar e-mail:",
+            error
+        );
+
+        return res.status(500).json({
+            mensagem:
+                "Erro ao confirmar e-mail.",
+            erro: error.message
         });
     }
 };

@@ -75,6 +75,46 @@ export const solicitarRecuperacaoSenha = async (req, res) => {
     }
 };
 
+export const verificarCodigoRecuperacao = async (req, res) => {
+    try {
+        const { email, codigo } = req.body;
+
+        if (typeof email !== "string" || !email.trim() || codigo === undefined || codigo === null || !String(codigo).trim()) {
+            return res.status(400).json({
+                mensagem: "E-mail e código de recuperação são obrigatórios."
+            });
+        }
+
+        const emailNormalizado = email.trim().toLowerCase();
+        const codigoRecebido = String(codigo).trim();
+        const recuperacao = buscarRecuperacaoPendente(emailNormalizado);
+
+        if (!recuperacao) {
+            return res.status(400).json({
+                mensagem: "Código de recuperação inexistente ou expirado."
+            });
+        }
+
+        if (recuperacao.codigo !== codigoRecebido) {
+            const limiteAtingido = registrarTentativaRecuperacao(emailNormalizado);
+            return res.status(400).json({
+                mensagem: limiteAtingido
+                    ? "Limite de tentativas atingido. Solicite um novo código."
+                    : "Código de recuperação inválido."
+            });
+        }
+
+        return res.status(200).json({
+            mensagem: "Código de recuperação válido."
+        });
+    } catch (error) {
+        console.error("Erro ao verificar código de recuperação:", error);
+        return res.status(500).json({
+            mensagem: "Não foi possível verificar o código. Tente novamente."
+        });
+    }
+};
+
 export const redefinirSenha = async (req, res) => {
     try {
         const {

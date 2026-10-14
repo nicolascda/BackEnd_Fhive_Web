@@ -5,11 +5,12 @@ import usuarioRoutes from "./routes/usuario.route.js";
 import dispositivoRoutes from "./routes/dispositivo.route.js";
 import rotinaRoutes from "./routes/rotina.route.js";
 import gerenciadorRoutes from "./routes/configurador.route.js";
+import equipeRoutes from "./routes/equipe.route.js";
 
 const app = express();
 
 
-app.use(express.json()); // Obrigatório para ler o req.body
+app.use(express.json({ limit: "7mb" })); // Obrigatório para ler o req.body
 app.use(cors());
 
 
@@ -17,6 +18,7 @@ app.use("/usuarios", usuarioRoutes);
 app.use("/dispositivos", dispositivoRoutes);
 app.use("/rotinas", rotinaRoutes);
 app.use("/usuarios", gerenciadorRoutes);
+app.use("/equipes", equipeRoutes);
 
 
 app.get("/", (req, res) => {

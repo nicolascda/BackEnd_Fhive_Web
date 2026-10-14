@@ -15,9 +15,11 @@ model Usuarios {
   email        String         @unique
   senha        String
   createdAt    DateTime       @default(now())
+  fotoPerfil   String?
 
   dispositivos Dispositivos[]
   rotinas      Rotinas[]
+  equipes      Equipes[]
 }
 
 model Dispositivos {
@@ -105,4 +107,24 @@ model ExecucoesRotina {
   createdAt       DateTime  @default(now())
 
   @@index([rotinaId, programadaPara])
+}
+
+model Equipes {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  nome              String
+  descricao         String?
+  imagemFundo       String?
+  logo              String?
+  plano             String   @default("Básico")
+  setor             String
+  limiteIntegrantes Int
+  codigo            String   @unique
+
+  usuarioId         String   @db.ObjectId
+  usuario           Usuarios @relation(fields: [usuarioId], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([usuarioId, createdAt])
 }

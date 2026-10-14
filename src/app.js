@@ -4,6 +4,7 @@ import cors from "cors";
 import usuarioRoutes from "./routes/usuario.route.js";
 import dispositivoRoutes from "./routes/dispositivo.route.js";
 import rotinaRoutes from "./routes/rotina.route.js";
+import gerenciadorRoutes from "./routes/configurador.route.js";
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use(cors());
 app.use("/usuarios", usuarioRoutes);
 app.use("/dispositivos", dispositivoRoutes);
 app.use("/rotinas", rotinaRoutes);
+app.use("/usuarios", gerenciadorRoutes);
 
 
 app.get("/", (req, res) => {

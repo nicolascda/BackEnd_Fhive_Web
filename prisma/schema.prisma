@@ -20,6 +20,7 @@ model Usuarios {
   dispositivos Dispositivos[]
   rotinas      Rotinas[]
   equipes      Equipes[]
+  equipeIntegrantes EquipeIntegrantes[]
 }
 
 model Dispositivos {
@@ -126,5 +127,47 @@ model Equipes {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  integrantes EquipeIntegrantes[]
+  cargos      CargosEquipe[]
+
   @@index([usuarioId, createdAt])
+}
+
+
+// Vínculo entre um usuário e uma equipe. O cargo pertence ao vínculo,
+// pois a mesma pessoa pode ter cargos diferentes em equipes diferentes.
+model EquipeIntegrantes {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  equipeId  String   @db.ObjectId
+  equipe    Equipes  @relation(fields: [equipeId], references: [id])
+  usuarioId String   @db.ObjectId
+  usuario   Usuarios @relation(fields: [usuarioId], references: [id])
+  cargoId   String   @db.ObjectId
+  cargo     CargosEquipe @relation(fields: [cargoId], references: [id])
+  createdAt DateTime @default(now())
+
+  // Impede que o mesmo usuário entre duas vezes na mesma equipe.
+  @@unique([equipeId, usuarioId])
+  @@index([usuarioId, createdAt])
+  @@index([equipeId, cargoId])
+}
+
+// Define os cargos disponíveis em uma equipe. Os integrantes guardam
+// apenas cargoId; as permissões não são duplicadas em cada integrante.
+model CargosEquipe {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  equipeId    String   @db.ObjectId
+  equipe      Equipes  @relation(fields: [equipeId], references: [id])
+  nome        String
+  descricao   String
+  cor         String   @default("#8060A8")
+  permissoes  Json
+  sistema     Boolean  @default(false)
+  integrantes EquipeIntegrantes[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // O nome de um cargo não pode se repetir dentro da mesma equipe.
+  @@unique([equipeId, nome])
+  @@index([equipeId, sistema])
 }

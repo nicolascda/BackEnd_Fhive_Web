@@ -3,7 +3,7 @@ import cors from "cors";
 
 import usuarioRoutes from "./routes/usuario.route.js";
 import dispositivoRoutes from "./routes/dispositivo.route.js";
-import rotinaRoutes from "./routes/rotina.route.js";
+import rotinaRoutes, { rotinaEquipeRouter } from "./routes/rotina.route.js";
 import gerenciadorRoutes from "./routes/configurador.route.js";
 import equipeRoutes from "./routes/equipe.route.js";
 import equipeIntegranteRoutes from "./routes/equipeIntegrante.route.js";
@@ -20,6 +20,7 @@ app.use("/usuarios", usuarioRoutes);
 app.use("/dispositivos", dispositivoRoutes);
 app.use("/rotinas", rotinaRoutes);
 app.use("/usuarios", gerenciadorRoutes);
+app.use("/equipes", rotinaEquipeRouter);
 app.use("/equipes", equipeRoutes);
 app.use("/equipes", equipeIntegranteRoutes);
 app.use("/equipes", cargoRoutes);

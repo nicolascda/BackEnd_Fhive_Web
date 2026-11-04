@@ -78,8 +78,13 @@ model Rotinas {
   usuarioId       String             @db.ObjectId
   usuario         Usuarios           @relation(fields: [usuarioId], references: [id])
 
-  dispositivoId   String             @db.ObjectId
-  dispositivo     Dispositivos       @relation(fields: [dispositivoId], references: [id])
+  // Rotinas novas pertencem à equipe. O vínculo opcional com dispositivo
+  // mantém compatibilidade com rotinas antigas criadas para um equipamento.
+  equipeId        String?            @db.ObjectId
+  equipe          Equipes?           @relation(fields: [equipeId], references: [id])
+
+  dispositivoId   String?            @db.ObjectId
+  dispositivo     Dispositivos?      @relation(fields: [dispositivoId], references: [id])
 
   execucoes       ExecucoesRotina[]
 
@@ -87,6 +92,7 @@ model Rotinas {
   updatedAt       DateTime           @updatedAt
 
   @@index([usuarioId, ativo])
+  @@index([equipeId, ativo])
   @@index([dispositivoId, ativo])
 }
 
@@ -129,6 +135,7 @@ model Equipes {
 
   integrantes EquipeIntegrantes[]
   cargos      CargosEquipe[]
+  rotinas     Rotinas[]
 
   @@index([usuarioId, createdAt])
 }

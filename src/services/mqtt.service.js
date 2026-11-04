@@ -2,19 +2,35 @@ import mqtt from "mqtt";
 import prisma from "../data/prisma.js";
 
 const filasPorDispositivo = new Map();
+let mqttFalhaAvisada = false;
 
 let mqttClient;
 
 export function iniciarMQTT() {
-    mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
-        username: process.env.MQTT_USERNAME,
-        password: process.env.MQTT_PASSWORD,
-        clientId: "fhive-backend",
-        reconnectPeriod: 5000,
-        clean: true
-    });
+    try {
+        mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
+            username: process.env.MQTT_USERNAME,
+            password: process.env.MQTT_PASSWORD,
+            clientId: "fhive-backend",
+            reconnectPeriod: 5000,
+            clean: true
+        });
+    } catch (erro) {
+        console.error(
+            "Não foi possível iniciar o MQTT:",
+            erro.message
+        );
+
+        console.log(
+            "O backend continuará funcionando sem o MQTT."
+        );
+
+        return null;
+    }
 
     mqttClient.on("connect", () => {
+        mqttFalhaAvisada = false;
+
         console.log("Conectado ao broker MQTT.");
 
         mqttClient.subscribe(
@@ -22,7 +38,10 @@ export function iniciarMQTT() {
             { qos: 1 },
             (erro) => {
                 if (erro) {
-                    console.error("Erro ao se inscrever no tópico:", erro);
+                    console.error(
+                        "Erro ao se inscrever no tópico:",
+                        erro.message
+                    );
                     return;
                 }
 
@@ -31,6 +50,14 @@ export function iniciarMQTT() {
                 );
             }
         );
+    });
+
+    mqttClient.on("reconnect", () => {
+        if (!mqttFalhaAvisada) {
+            console.log(
+                "Tentando reconectar ao broker MQTT..."
+            );
+        }
     });
 
     mqttClient.on("message", (topic, mensagem) => {
@@ -44,7 +71,10 @@ export function iniciarMQTT() {
             const proximaFila = filaAtual
                 .then(() => processarMensagem(deviceId, dados))
                 .catch((erro) => {
-                    console.error("Erro ao processar mensagem:", erro);
+                    console.error(
+                        "Erro ao processar mensagem:",
+                        erro
+                    );
                 });
 
             const filaFinal = proximaFila.finally(() => {
@@ -55,12 +85,32 @@ export function iniciarMQTT() {
 
             filasPorDispositivo.set(deviceId, filaFinal);
         } catch (erro) {
-            console.error("Erro ao interpretar mensagem MQTT:", erro);
+            console.error(
+                "Erro ao interpretar mensagem MQTT:",
+                erro
+            );
         }
     });
 
+    mqttClient.on("offline", () => {
+        console.log(
+            "MQTT offline. O backend HTTP continuará funcionando."
+        );
+    });
+
     mqttClient.on("error", (erro) => {
-        console.error("Erro no MQTT:", erro);
+        if (!mqttFalhaAvisada) {
+            console.error(
+                "MQTT indisponível:",
+                erro.message
+            );
+
+            console.log(
+                "O backend HTTP continuará funcionando sem o MQTT."
+            );
+
+            mqttFalhaAvisada = true;
+        }
     });
 
     return mqttClient;

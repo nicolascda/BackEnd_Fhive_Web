@@ -1,4 +1,10 @@
 import prisma from "../data/prisma.js";
+import {
+    erro as erroEquipe,
+    idValido as idEquipeValido,
+    obterContextoEquipe,
+    pode
+} from "../services/equipe.service.js";
 
 const diasValidos = [ "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"
 ];
@@ -453,5 +459,217 @@ export const excluirRotina = async (req, res) => {
     } catch (error) {
         console.error("Erro ao excluir rotina:", error);
         return erro500(res, "Erro ao excluir rotina.", error);
+    }
+};
+
+// Rotina relacionada ao frontEnd de equipes
+
+const diasEquipeValidos = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const horarioEquipeValido = (valor) =>
+    typeof valor === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(valor);
+const minutosEquipe = (horario) => {
+    const [hora, minuto] = horario.split(":").map(Number);
+    return hora * 60 + minuto;
+};
+
+function validarRotinaEquipe(dados) {
+    if (typeof dados.nome !== "string" || !dados.nome.trim() || dados.nome.trim().length > 80) {
+        return "Informe um nome para a rotina com até 80 caracteres.";
+    }
+    if (dados.descricao !== undefined && dados.descricao !== null && typeof dados.descricao !== "string") {
+        return "A descrição da rotina é inválida.";
+    }
+    if (typeof dados.descricao === "string" && dados.descricao.length > 240) {
+        return "A descrição deve ter no máximo 240 caracteres.";
+    }
+    if (!horarioEquipeValido(dados.horarioInicial)) {
+        return "O horário inicial deve estar no formato HH:mm.";
+    }
+    if (!horarioEquipeValido(dados.horarioFinal)) {
+        return "O horário final deve estar no formato HH:mm.";
+    }
+    if (minutosEquipe(dados.horarioFinal) < minutosEquipe(dados.horarioInicial)) {
+        return "O horário final precisa ser posterior ao inicial.";
+    }
+    if (
+        !Array.isArray(dados.diasSemana) ||
+        !dados.diasSemana.length ||
+        dados.diasSemana.some((dia) => !diasEquipeValidos.includes(dia)) ||
+        new Set(dados.diasSemana).size !== dados.diasSemana.length
+    ) {
+        return "Selecione pelo menos um dia da semana válido.";
+    }
+    if (!Array.isArray(dados.acoes) || !dados.acoes.length) {
+        return "Adicione pelo menos uma ação à rotina.";
+    }
+
+    for (let indice = 0; indice < dados.acoes.length; indice += 1) {
+        const acao = dados.acoes[indice];
+        if (!acao || typeof acao !== "object" || Array.isArray(acao)) {
+            return `A ação ${indice + 1} é inválida.`;
+        }
+        if (typeof acao.id !== "string" || !acao.id.trim()) {
+            return `A ação ${indice + 1} não possui um identificador válido.`;
+        }
+        if (typeof acao.nome !== "string" || !acao.nome.trim() || acao.nome.trim().length > 80) {
+            return `Informe um nome válido para a ação ${indice + 1}.`;
+        }
+        if (typeof acao.descricao !== "string" || acao.descricao.length > 160) {
+            return `A instrução da ação ${indice + 1} é inválida.`;
+        }
+        if (!horarioEquipeValido(acao.horario)) {
+            return `O horário da ação ${indice + 1} deve estar no formato HH:mm.`;
+        }
+        if (
+            minutosEquipe(acao.horario) < minutosEquipe(dados.horarioInicial) ||
+            minutosEquipe(acao.horario) > minutosEquipe(dados.horarioFinal)
+        ) {
+            return `A ação ${indice + 1} precisa ficar entre o início e o fim da rotina.`;
+        }
+        if (indice > 0 && minutosEquipe(acao.horario) < minutosEquipe(dados.acoes[indice - 1].horario)) {
+            return "As ações precisam estar em ordem cronológica.";
+        }
+    }
+
+    return null;
+}
+
+async function obterEquipeParaRotina(req, res, permissao) {
+    const contexto = await obterContextoEquipe(req.params.equipeId, req.usuario.id);
+    if (contexto.mensagem) {
+        erroEquipe(res, contexto.status, contexto.mensagem);
+        return null;
+    }
+    if (!pode(contexto, permissao)) {
+        erroEquipe(res, 403, "Seu cargo não permite realizar esta operação nesta equipe.");
+        return null;
+    }
+    return contexto.equipe;
+}
+
+export const listarRotinasEquipe = async (req, res) => {
+    try {
+        const equipe = await obterEquipeParaRotina(req, res, "visualizarAmbiente");
+        if (!equipe) return;
+
+        const rotinas = await prisma.rotinas.findMany({
+            where: { equipeId: equipe.id },
+            orderBy: { createdAt: "desc" }
+        });
+
+        return res.status(200).json({ rotinas });
+    } catch (error) {
+        console.error("Erro ao listar rotinas da equipe:", error);
+        return erroEquipe(res, 500, "Não foi possível carregar as rotinas da equipe.");
+    }
+};
+
+export const criarRotinaEquipe = async (req, res) => {
+    try {
+        const equipe = await obterEquipeParaRotina(req, res, "gerenciarRotinas");
+        if (!equipe) return;
+
+        const dados = req.body || {};
+        const erroValidacao = validarRotinaEquipe(dados);
+        if (erroValidacao) return erroEquipe(res, 400, erroValidacao);
+
+        const nome = dados.nome.trim();
+        const existente = await prisma.rotinas.findFirst({ where: { equipeId: equipe.id, nome } });
+        if (existente) return erroEquipe(res, 409, "Já existe uma rotina com esse nome nesta equipe.");
+
+        const rotina = await prisma.rotinas.create({
+            data: {
+                nome,
+                descricao: dados.descricao?.trim() || null,
+                horarioInicial: dados.horarioInicial,
+                horarioFinal: dados.horarioFinal,
+                diasSemana: dados.diasSemana,
+                acoes: dados.acoes.map((acao) => ({
+                    id: acao.id,
+                    horario: acao.horario,
+                    nome: acao.nome.trim(),
+                    descricao: acao.descricao.trim()
+                })),
+                ativo: true,
+                usuarioId: req.usuario.id,
+                equipeId: equipe.id
+            }
+        });
+
+        return res.status(201).json({ mensagem: "Rotina salva no banco de dados.", rotina });
+    } catch (error) {
+        console.error("Erro ao criar rotina da equipe:", error);
+        return erroEquipe(res, 500, "Não foi possível salvar a rotina.");
+    }
+};
+
+export const atualizarRotinaEquipe = async (req, res) => {
+    try {
+        const equipe = await obterEquipeParaRotina(req, res, "gerenciarRotinas");
+        if (!equipe) return;
+        if (!idEquipeValido(req.params.id)) return erroEquipe(res, 400, "ID de rotina inválido.");
+
+        const atual = await prisma.rotinas.findFirst({
+            where: { id: req.params.id, equipeId: equipe.id }
+        });
+        if (!atual) return erroEquipe(res, 404, "Rotina não encontrada nesta equipe.");
+
+        const dados = {
+            nome: req.body.nome ?? atual.nome,
+            descricao: req.body.descricao !== undefined ? req.body.descricao : (atual.descricao ?? ""),
+            horarioInicial: req.body.horarioInicial ?? atual.horarioInicial,
+            horarioFinal: req.body.horarioFinal ?? atual.horarioFinal,
+            diasSemana: req.body.diasSemana ?? atual.diasSemana,
+            acoes: req.body.acoes ?? atual.acoes
+        };
+        const erroValidacao = validarRotinaEquipe(dados);
+        if (erroValidacao) return erroEquipe(res, 400, erroValidacao);
+
+        const nome = dados.nome.trim();
+        const nomeDuplicado = await prisma.rotinas.findFirst({
+            where: { equipeId: equipe.id, nome, id: { not: atual.id } }
+        });
+        if (nomeDuplicado) return erroEquipe(res, 409, "Já existe outra rotina com esse nome nesta equipe.");
+
+        const rotina = await prisma.rotinas.update({
+            where: { id: atual.id },
+            data: {
+                nome,
+                descricao: dados.descricao?.trim() || null,
+                horarioInicial: dados.horarioInicial,
+                horarioFinal: dados.horarioFinal,
+                diasSemana: dados.diasSemana,
+                acoes: dados.acoes.map((acao) => ({
+                    id: acao.id,
+                    horario: acao.horario,
+                    nome: acao.nome.trim(),
+                    descricao: acao.descricao.trim()
+                }))
+            }
+        });
+
+        return res.status(200).json({ mensagem: "Rotina atualizada no banco de dados.", rotina });
+    } catch (error) {
+        console.error("Erro ao atualizar rotina da equipe:", error);
+        return erroEquipe(res, 500, "Não foi possível atualizar a rotina.");
+    }
+};
+
+export const excluirRotinaEquipe = async (req, res) => {
+    try {
+        const equipe = await obterEquipeParaRotina(req, res, "gerenciarRotinas");
+        if (!equipe) return;
+        if (!idEquipeValido(req.params.id)) return erroEquipe(res, 400, "ID de rotina inválido.");
+
+        const rotina = await prisma.rotinas.findFirst({
+            where: { id: req.params.id, equipeId: equipe.id }
+        });
+        if (!rotina) return erroEquipe(res, 404, "Rotina não encontrada nesta equipe.");
+
+        await prisma.rotinas.delete({ where: { id: rotina.id } });
+        return res.status(200).json({ mensagem: "Rotina excluída do banco de dados." });
+    } catch (error) {
+        console.error("Erro ao excluir rotina da equipe:", error);
+        return erroEquipe(res, 500, "Não foi possível excluir a rotina.");
     }
 };

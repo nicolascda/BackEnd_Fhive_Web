@@ -8,6 +8,7 @@ import gerenciadorRoutes from "./routes/configurador.route.js";
 import equipeRoutes from "./routes/equipe.route.js";
 import equipeIntegranteRoutes from "./routes/equipeIntegrante.route.js";
 import cargoRoutes from "./routes/cargo.route.js";
+import iaRoutes from "./routes/ia.route.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use("/equipes", rotinaEquipeRouter);
 app.use("/equipes", equipeRoutes);
 app.use("/equipes", equipeIntegranteRoutes);
 app.use("/equipes", cargoRoutes);
+app.use("/ia", iaRoutes);
 
 
 app.get("/", (req, res) => {

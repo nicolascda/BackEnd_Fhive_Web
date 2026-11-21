@@ -145,7 +145,11 @@ async function processarMensagem(deviceId, dados) {
         where: {
             dispositivoId: dispositivo.id,
             sessaoId,
-            finalizado: false
+            finalizado: false,
+            OR: [
+                { origem: "mqtt" },
+                { origem: null }
+            ]
         },
         orderBy: {
             periodoInicio: "desc"
@@ -163,6 +167,7 @@ async function processarMensagem(deviceId, dados) {
                 consumo10Minutos: null,
                 finalizado: false,
                 leituras: [leitura],
+                origem: "mqtt",
                 dispositivoId: dispositivo.id
             }
         });
@@ -220,7 +225,8 @@ async function processarMensagem(deviceId, dados) {
                 consumo5Minutos,
                 consumo10Minutos,
                 finalizado: proximoMinuto >= 10,
-                leituras
+                leituras,
+                origem: "mqtt"
             }
         });
     }

@@ -111,7 +111,13 @@ export const listarTelemetrias = async (req, res) => {
 
         const telemetrias = await prisma.telemetrias.findMany({
             where: {
-                dispositivoId: dispositivo.id
+                dispositivoId: dispositivo.id,
+                // Não mistura sessões artificiais na consulta padrão de telemetria real.
+                // origem: null também inclui documentos antigos, criados antes deste campo existir.
+                OR: [
+                    { origem: "mqtt" },
+                    { origem: null }
+                ]
             },
             orderBy: {
                 periodoInicio: "desc"

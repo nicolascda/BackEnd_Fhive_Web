@@ -501,7 +501,7 @@ const ESQUEMA_ANOMALIAS = {
 
 const INSTRUCAO_ANOMALIAS = `Você é um analista de telemetria de dispositivos IoT e eletrodomésticos do FHIVE.
 
-Analise somente as especificações fornecidas pelo usuário e as estatísticas reais calculadas pelo back-end a partir das leituras do dispositivo.
+Analise somente as especificações fornecidas pelo usuário e as estatísticas calculadas pelo back-end a partir das leituras do dispositivo. O prompt informará se a origem é telemetria real ou gráfico modelo artificial.
 
 Regras obrigatórias:
 - Retorne somente JSON conforme o esquema fornecido.
@@ -513,6 +513,7 @@ Regras obrigatórias:
 - Não diagnostique defeito com certeza e não afirme que o aparelho está seguro.
 - Recomendações devem ser observacionais e seguras. Não oriente a abrir o equipamento ou mexer em circuitos energizados.
 - Se identificar possível superaquecimento, sobrecorrente ou tensão muito fora da referência informada, recomende interromper o uso de forma segura e procurar assistência técnica qualificada.
+- Quando a origem for um GRÁFICO MODELO ARTIFICIAL, analise apenas a consistência da série simulada. Não conclua que o aparelho físico apresenta ou não apresenta defeito, não trate os valores como medições e deixe explícito que o resultado não é diagnóstico do equipamento real.
 - Responda em português do Brasil.`;
 
 function calcularEstatisticas(valores) {
@@ -660,25 +661,61 @@ export const analisarAnomaliasDispositivo = async (req, res) => {
             descricaoUso: textoOpcional(especificacoesRecebidas.descricaoUso, 500) || null
         };
 
-        const telemetrias = await prisma.telemetrias.findMany({
-            where: { dispositivoId: dispositivo.id },
-            orderBy: { periodoInicio: "desc" },
-            take: 20,
-            select: {
-                periodoInicio: true,
-                minutoAtual: true,
-                consumo1Minuto: true,
-                consumoAcumulado: true,
-                consumo5Minutos: true,
-                consumo10Minutos: true,
-                leituras: true
-            }
-        });
+        const graficoModeloId = req.body?.graficoModeloId;
+        let telemetrias = [];
+        let graficoModelo = null;
+        let origemDados = "telemetria_real";
 
-        if (!telemetrias.length) {
-            return res.status(409).json({
-                mensagem: "Este dispositivo ainda não possui telemetrias registradas para análise."
+        if (graficoModeloId !== undefined && graficoModeloId !== null && graficoModeloId !== "") {
+            if (typeof graficoModeloId !== "string" || !/^[a-f\d]{24}$/i.test(graficoModeloId)) {
+                return res.status(400).json({ mensagem: "ID do gráfico modelo inválido." });
+            }
+
+            // O ID do gráfico modelo agora é o _id de uma sessão em Telemetrias.
+            graficoModelo = await prisma.telemetrias.findFirst({
+                where: {
+                    id: graficoModeloId,
+                    dispositivoId: dispositivo.id,
+                    origem: "modelo_artificial"
+                }
             });
+
+            if (!graficoModelo) {
+                return res.status(404).json({
+                    mensagem: "O gráfico modelo não pertence ao aparelho selecionado ou não foi encontrado em Telemetrias."
+                });
+            }
+
+            origemDados = "modelo_artificial";
+            telemetrias = [graficoModelo];
+        } else {
+            telemetrias = await prisma.telemetrias.findMany({
+                where: {
+                    dispositivoId: dispositivo.id,
+                    // Inclui sessões MQTT atuais e registros legados sem o campo origem.
+                    OR: [
+                        { origem: "mqtt" },
+                        { origem: null }
+                    ]
+                },
+                orderBy: { periodoInicio: "desc" },
+                take: 20,
+                select: {
+                    periodoInicio: true,
+                    minutoAtual: true,
+                    consumo1Minuto: true,
+                    consumoAcumulado: true,
+                    consumo5Minutos: true,
+                    consumo10Minutos: true,
+                    leituras: true
+                }
+            });
+
+            if (!telemetrias.length) {
+                return res.status(409).json({
+                    mensagem: "Este dispositivo ainda não possui telemetrias reais registradas. Crie ou selecione um gráfico modelo para testar a análise."
+                });
+            }
         }
 
         const resumoTelemetria = montarResumoTelemetria(telemetrias);
@@ -702,10 +739,13 @@ ${JSON.stringify({
 ESPECIFICAÇÕES INFORMADAS PELO USUÁRIO (campos null não foram informados):
 ${JSON.stringify(especificacoes, null, 2)}
 
+ORIGEM DOS DADOS: ${origemDados === "modelo_artificial" ? "GRÁFICO MODELO ARTIFICIAL" : "TELEMETRIA REAL RECEBIDA PELO MQTT"}
+${origemDados === "modelo_artificial" ? `AVISO: ${graficoModelo.aviso || "Dados artificiais armazenados na coleção Telemetrias."} Não conclua que o aparelho físico apresenta ou não apresenta defeito. Analise somente o comportamento da série simulada e deixe explícito que o resultado não é um diagnóstico do equipamento real.` : "Os dados são leituras reais recebidas pelo backend, mas ainda devem ser interpretados com cautela."}
+
 ESTATÍSTICAS CALCULADAS PELO BACK-END A PARTIR DAS TELEMETRIAS:
 ${JSON.stringify(resumoTelemetria, null, 2)}
 
-Analise se há sinais de comportamento fora do esperado. Caso os dados não permitam concluir, use status 'dados_insuficientes'. Retorne apenas o JSON solicitado.`;
+Analise se há sinais de comportamento fora do esperado nos dados fornecidos. Caso os dados não permitam concluir, use status 'dados_insuficientes'. Retorne apenas o JSON solicitado.`;
 
         const texto = await gerarRespostaGemini({
             instrucaoSistema: INSTRUCAO_ANOMALIAS,
@@ -747,7 +787,16 @@ Analise se há sinais de comportamento fora do esperado. Caso os dados não perm
                 periodoMaisRecente: telemetrias[0]?.periodoInicio?.toISOString?.() || null
             },
             modelo: obterModeloConfigurado(),
-            aviso: "A análise é uma indicação automatizada e não substitui medição elétrica, diagnóstico técnico ou inspeção profissional."
+            origemDados,
+            graficoModelo: graficoModelo ? {
+                id: graficoModelo.id,
+                nome: graficoModelo.nomeGrafico || "Gráfico modelo",
+                sessaoId: graficoModelo.sessaoId,
+                quantidadeLeituras: Array.isArray(graficoModelo.leituras) ? graficoModelo.leituras.length : 0
+            } : null,
+            aviso: origemDados === "modelo_artificial"
+                ? "ANÁLISE DE DADOS SIMULADOS: os valores foram gerados artificialmente para testar gráficos e a IA. Não representam medições reais nem permitem concluir sobre o estado físico do aparelho."
+                : "A análise é uma indicação automatizada e não substitui medição elétrica, diagnóstico técnico ou inspeção profissional."
         });
     } catch (erro) {
         return responderErroGemini(res, erro, "análise de anomalias");

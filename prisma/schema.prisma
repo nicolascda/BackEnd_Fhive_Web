@@ -56,12 +56,17 @@ model Telemetrias {
 
   leituras            Json
 
+  origem              String?
+  nomeGrafico         String?
+  aviso               String?
+
   dispositivoId       String        @db.ObjectId
   dispositivo         Dispositivos  @relation(fields: [dispositivoId], references: [id])
 
   @@index([dispositivoId, periodoInicio])
   @@index([dispositivoId, finalizado])
   @@index([dispositivoId, sessaoId, finalizado])
+  @@index([dispositivoId, origem, periodoInicio])
 }
 
 model Rotinas {

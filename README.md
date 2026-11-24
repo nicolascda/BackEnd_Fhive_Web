@@ -16,6 +16,7 @@ API REST responsável pela camada de serviços do **FHIVE**, conectando a aplica
 - [Banco de dados e Prisma](#banco-de-dados-e-prisma)
 - [Autenticação](#autenticação)
 - [Documentação da API](#documentação-da-api)
+- [Swagger e testes automatizados](#swagger-e-testes-automatizados)
 - [Integração MQTT e IoT](#integração-mqtt-e-iot)
 - [Modelo de dados](#modelo-de-dados)
 - [Tratamento de erros](#tratamento-de-erros)
@@ -80,10 +81,15 @@ BackEnd_Fhive_Web/
 │   │   ├── dispositivo.controller.js
 │   │   ├── equipe.controller.js
 │   │   ├── equipeIntegrante.controller.js
+│   │   ├── graficoModelo.controller.js
+│   │   ├── ia.controller.js
 │   │   ├── rotina.controller.js
 │   │   └── usuario.controller.js
 │   ├── data/
 │   │   └── prisma.js
+│   ├── docs/
+│   │   ├── openapi.js
+│   │   └── swaggerUi.js
 │   ├── middlewares/
 │   │   └── authMiddleware.js
 │   ├── routes/
@@ -92,16 +98,20 @@ BackEnd_Fhive_Web/
 │   │   ├── dispositivo.route.js
 │   │   ├── equipe.route.js
 │   │   ├── equipeIntegrante.route.js
+│   │   ├── graficoModelo.route.js
+│   │   ├── ia.route.js
 │   │   ├── rotina.route.js
 │   │   └── usuario.route.js
 │   ├── scripts/
-│   │   ├── dispositivo-teste.js
-│   │   └── teste.js
 │   └── services/
 │       ├── codigo.service.js
 │       ├── email.service.js
 │       ├── equipe.service.js
+│       ├── gemini.service.js
 │       └── mqtt.service.js
+├── tests/
+│   ├── controllers.test.js
+│   └── openapi.test.js
 ├── .env.example
 ├── .gitignore
 ├── package.json
@@ -118,6 +128,8 @@ BackEnd_Fhive_Web/
 - **`middlewares/`**: contém funções executadas antes dos controllers, como a validação do token JWT.
 - **`services/`**: concentra funcionalidades reutilizáveis, como envio de e-mails, códigos temporários, regras de equipes e comunicação MQTT.
 - **`data/`**: instancia e disponibiliza o cliente Prisma.
+- **`docs/`**: contém o contrato OpenAPI e a página do Swagger UI.
+- **`tests/`**: contém testes unitários dos nove controllers e testes do contrato OpenAPI.
 - **`scripts/`**: contém scripts auxiliares, incluindo a simulação de um dispositivo IoT.
 - **`prisma/`**: contém o schema que define os modelos e relacionamentos do banco de dados.
 
@@ -125,7 +137,7 @@ BackEnd_Fhive_Web/
 
 Antes de iniciar, tenha instalado:
 
-- Node.js **18.18 ou superior**;
+- Node.js **22.3 ou superior**;
 - npm;
 - uma instância MongoDB acessível (por exemplo, MongoDB Atlas ou MongoDB local);
 - uma conta ou servidor SMTP para envio dos e-mails de confirmação e recuperação de senha;
@@ -327,7 +339,14 @@ O código de recuperação expira em **1 hora**. O serviço limita a cinco tenta
 
 **URL base local:** `http://localhost:3000`
 
-Os endpoints abaixo correspondem às rotas registradas atualmente em `src/app.js` e nos arquivos de `src/routes/`. Os caminhos não utilizam o prefixo `/api`.
+A documentação interativa está disponível em:
+
+- **Swagger UI:** `http://localhost:3000/docs`
+- **Contrato OpenAPI em JSON:** `http://localhost:3000/docs.json`
+
+No Swagger, use o botão **Authorize** para informar o JWT retornado por `POST /usuarios/login`. As rotas são expostas diretamente, sem o prefixo `/api`.
+
+Os endpoints abaixo correspondem às rotas registradas atualmente em `src/app.js` e nos arquivos de `src/routes/`.
 
 ### Convenções
 
@@ -365,8 +384,13 @@ Os endpoints abaixo correspondem às rotas registradas atualmente em `src/app.js
 | `GET` | `/dispositivos` | Sim |
 | `GET` | `/dispositivos/:id` | Sim |
 | `GET` | `/dispositivos/:id/telemetrias` | Sim |
+| `GET` | `/dispositivos/:id/controle` | Sim |
+| `PUT` | `/dispositivos/:id/controle` | Sim |
+| `DELETE` | `/dispositivos/:id/controle` | Sim |
 
-> O controller atual disponibiliza criação e consulta de dispositivos e telemetrias. Não há endpoints de atualização ou exclusão de dispositivos neste conjunto de rotas.
+O vínculo de controle armazena o provedor `samsung_ip_control`, o IPv4 privado da TV e seus metadados opcionais. A rota não abre o WebSocket nem envia comandos à televisão; a comunicação local permanece no fluxo de controle do cliente.
+
+> Não há endpoints de atualização ou exclusão do cadastro principal de dispositivos neste conjunto de rotas.
 
 ### Rotinas individuais
 
@@ -413,6 +437,25 @@ Os endpoints abaixo correspondem às rotas registradas atualmente em `src/app.js
 | `GET` | `/equipes/:id/cargos` | Sim |
 | `POST` | `/equipes/:id/cargos` | Sim |
 | `DELETE` | `/equipes/:id/cargos/:cargoId` | Sim |
+
+### Inteligência artificial
+
+| Método | Endpoint | Autenticação |
+|---|---|---|
+| `POST` | `/ia/perguntar` | Sim |
+| `POST` | `/ia/estimar-consumo` | Sim |
+| `POST` | `/ia/dispositivos/:id/analisar-anomalias` | Sim |
+
+### Gráficos modelo
+
+| Método | Endpoint | Autenticação |
+|---|---|---|
+| `GET` | `/graficos-modelo` | Sim |
+| `POST` | `/graficos-modelo` | Sim |
+| `GET` | `/graficos-modelo/:id` | Sim |
+| `DELETE` | `/graficos-modelo/:id` | Sim |
+
+Os gráficos modelo utilizam a coleção `Telemetrias`, com origem `modelo_artificial`; seus dados são simulados e não representam medições reais.
 
 ### Exemplos de requisição
 
@@ -633,6 +676,24 @@ node src/scripts/dispositivo-teste.js
 ```
 
 O simulador publica dez leituras, com intervalo de dez segundos entre elas, e encerra a conexão ao terminar.
+
+## Swagger e testes automatizados
+
+A API possui documentação OpenAPI 3.0.3 integrada ao Express. Depois de iniciar o backend, acesse `http://localhost:3000/docs`. A interface Swagger UI carrega seus arquivos estáticos pelo CDN do Swagger UI; por isso, a visualização interativa exige acesso à internet. O JSON OpenAPI fica disponível localmente em `/docs.json`.
+
+Os testes usam o executor nativo `node:test`, sem acrescentar dependências de teste ao projeto:
+
+```bash
+npm test
+```
+
+Para executar os testes novamente quando algum arquivo mudar:
+
+```bash
+npm run test:watch
+```
+
+A suíte contém testes unitários para os nove controllers (`usuario`, `configurador`, `dispositivo`, `equipe`, `equipeIntegrante`, `cargo`, `rotina`, `ia` e `graficoModelo`). Cada módulo possui cenários de sucesso e de erro; também há testes específicos para o vínculo da TV Samsung, para os exemplos e códigos de resposta OpenAPI e para impedir que o `GET /usuarios` anuncie erros de upload de imagem. As dependências de banco, e-mail, autenticação e Gemini são simuladas nos testes, portanto eles não precisam acessar o MongoDB real nem serviços externos. O executor usa a API `node:test` e mocks de módulos nativos do Node.js (Node 22.3 ou superior); não adiciona dependências de teste ao projeto.
 
 ## Tratamento de erros
 

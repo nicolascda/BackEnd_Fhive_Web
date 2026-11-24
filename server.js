@@ -15,6 +15,7 @@ const mqttConfigurado = Boolean(
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na http://localhost:${PORT}`);
+  console.log(`Documentação de Api rodando em http://localhost:${PORT}/docs`);
 });
 
 // O MQTT é iniciado separadamente.

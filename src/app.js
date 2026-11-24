@@ -10,6 +10,8 @@ import equipeIntegranteRoutes from "./routes/equipeIntegrante.route.js";
 import cargoRoutes from "./routes/cargo.route.js";
 import iaRoutes from "./routes/ia.route.js";
 import graficoModeloRoutes from "./routes/graficoModelo.route.js";
+import openapi from "./docs/openapi.js";
+import { swaggerUiHtml } from "./docs/swaggerUi.js";
 
 
 const app = express();
@@ -29,6 +31,15 @@ app.use("/equipes", equipeIntegranteRoutes);
 app.use("/equipes", cargoRoutes);
 app.use("/ia", iaRoutes);
 app.use("/graficos-modelo", graficoModeloRoutes);
+
+// Documentação OpenAPI e interface Swagger UI.
+app.get("/docs.json", (req, res) => {
+    res.status(200).json(openapi);
+});
+
+app.get(["/docs", "/docs/"], (req, res) => {
+    res.status(200).type("html").send(swaggerUiHtml);
+});
 
 
 app.get("/", (req, res) => {

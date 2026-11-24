@@ -10,9 +10,182 @@ datasource db {
 }
 
 model Usuarios {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
   nome         String
-  email        String @unique
+  email        String         @unique
   senha        String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime       @default(now())
+  fotoPerfil   String?
+
+  dispositivos Dispositivos[]
+  rotinas      Rotinas[]
+  equipes      Equipes[]
+  equipeIntegrantes EquipeIntegrantes[]
+}
+
+model Dispositivos {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  deviceId      String         @unique
+  nome          String
+  tipo          String
+  status        String         @default("offline")
+  lastSeenAt    DateTime?
+  createdAt     DateTime       @default(now())
+
+  controleProvedor    String?
+  controleIp          String?
+  controleNome        String?
+  controleModelo      String?
+  controlePareadoEm   DateTime?
+
+  usuarioId     String         @db.ObjectId
+  usuario       Usuarios       @relation(fields: [usuarioId], references: [id])
+
+  telemetrias   Telemetrias[]
+  rotinas       Rotinas[]
+}
+
+model Telemetrias {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  sessaoId            String?
+
+  periodoInicio       DateTime      @default(now())
+  atualizadoEm        DateTime      @updatedAt
+
+  minutoAtual         Int
+  consumo1Minuto      Float
+  consumoAcumulado    Float
+  consumo5Minutos     Float?
+  consumo10Minutos    Float?
+
+  finalizado          Boolean       @default(false)
+
+  leituras            Json
+
+  origem              String?
+  nomeGrafico         String?
+  aviso               String?
+
+  dispositivoId       String        @db.ObjectId
+  dispositivo         Dispositivos  @relation(fields: [dispositivoId], references: [id])
+
+  @@index([dispositivoId, periodoInicio])
+  @@index([dispositivoId, finalizado])
+  @@index([dispositivoId, sessaoId, finalizado])
+  @@index([dispositivoId, origem, periodoInicio])
+}
+
+model Rotinas {
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  nome            String
+  descricao       String?
+  ativo           Boolean            @default(true)
+
+  horarioInicial  String
+  horarioFinal    String?
+  diasSemana      Json
+  acoes           Json
+
+  usuarioId       String             @db.ObjectId
+  usuario         Usuarios           @relation(fields: [usuarioId], references: [id])
+
+  // Rotinas novas pertencem à equipe. O vínculo opcional com dispositivo
+  // mantém compatibilidade com rotinas antigas criadas para um equipamento.
+  equipeId        String?            @db.ObjectId
+  equipe          Equipes?           @relation(fields: [equipeId], references: [id])
+
+  dispositivoId   String?            @db.ObjectId
+  dispositivo     Dispositivos?      @relation(fields: [dispositivoId], references: [id])
+
+  execucoes       ExecucoesRotina[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([usuarioId, ativo])
+  @@index([equipeId, ativo])
+  @@index([dispositivoId, ativo])
+}
+
+model ExecucoesRotina {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+
+  rotinaId        String    @db.ObjectId
+  rotina          Rotinas   @relation(fields: [rotinaId], references: [id])
+
+  acaoOrdem       Int
+  tipoAcao        String
+  dados           Json
+
+  programadaPara  DateTime
+  executadaEm     DateTime?
+  status          String    @default("pendente")
+  erro            String?
+
+  createdAt       DateTime  @default(now())
+
+  @@index([rotinaId, programadaPara])
+}
+
+model Equipes {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  nome              String
+  descricao         String?
+  imagemFundo       String?
+  logo              String?
+  plano             String   @default("Básico")
+  setor             String
+  limiteIntegrantes Int
+  codigo            String   @unique
+
+  usuarioId         String   @db.ObjectId
+  usuario           Usuarios @relation(fields: [usuarioId], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  integrantes EquipeIntegrantes[]
+  cargos      CargosEquipe[]
+  rotinas     Rotinas[]
+
+  @@index([usuarioId, createdAt])
+}
+
+
+// Vínculo entre um usuário e uma equipe. O cargo pertence ao vínculo,
+// pois a mesma pessoa pode ter cargos diferentes em equipes diferentes.
+model EquipeIntegrantes {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  equipeId  String   @db.ObjectId
+  equipe    Equipes  @relation(fields: [equipeId], references: [id])
+  usuarioId String   @db.ObjectId
+  usuario   Usuarios @relation(fields: [usuarioId], references: [id])
+  cargoId   String   @db.ObjectId
+  cargo     CargosEquipe @relation(fields: [cargoId], references: [id])
+  createdAt DateTime @default(now())
+
+  // Impede que o mesmo usuário entre duas vezes na mesma equipe.
+  @@unique([equipeId, usuarioId])
+  @@index([usuarioId, createdAt])
+  @@index([equipeId, cargoId])
+}
+
+// Define os cargos disponíveis em uma equipe. Os integrantes guardam
+// apenas cargoId; as permissões não são duplicadas em cada integrante.
+model CargosEquipe {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  equipeId    String   @db.ObjectId
+  equipe      Equipes  @relation(fields: [equipeId], references: [id])
+  nome        String
+  descricao   String
+  cor         String   @default("#8060A8")
+  permissoes  Json
+  sistema     Boolean  @default(false)
+  integrantes EquipeIntegrantes[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // O nome de um cargo não pode se repetir dentro da mesma equipe.
+  @@unique([equipeId, nome])
+  @@index([equipeId, sistema])
 }
